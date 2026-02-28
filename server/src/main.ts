@@ -132,10 +132,11 @@ const bootstrap = async (): Promise<void> => {
   appServer.on("error", (error: NodeJS.ErrnoException) => {
     if (error.code === "EADDRINUSE") {
       console.error(`Port ${PORT} is already in use. Stop the existing process or set PORT to a different value.`);
-      return;
+      process.exit(1);
     }
 
     console.error("Server startup error", error);
+    process.exit(1);
   });
 
   appServer.listen(PORT, "0.0.0.0", () => {

@@ -5,7 +5,9 @@ import { defineConfig, loadEnv } from "vite";
 
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  const serverUrl = env.VITE_SERVER_URL || "http://localhost:3000";
+  const configuredPort = Number(env.PORT || 3000);
+  const fallbackPort = Number.isFinite(configuredPort) && configuredPort > 0 ? configuredPort : 3000;
+  const serverUrl = env.VITE_SERVER_URL || `http://localhost:${fallbackPort}`;
 
   return {
     root: __dirname,
@@ -17,6 +19,7 @@ export default defineConfig(({ mode }) => {
     },
     server: {
       port: 5173,
+      strictPort: true,
       proxy: {
         "/api": {
           target: serverUrl,

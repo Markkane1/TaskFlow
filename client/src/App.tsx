@@ -44,6 +44,7 @@ import {
 import { 
   format, 
   formatDistanceToNow,
+  parse,
   startOfMonth, 
   endOfMonth, 
   startOfWeek, 
@@ -177,6 +178,129 @@ const formatTaskTime = (value?: string | null): string => {
   const parsed = parseAppDate(value);
   if (!parsed) return '--';
   return format(parsed, 'h:mm a');
+};
+
+const getUserInitials = (fullName?: string | null): string => {
+  if (!fullName) return '?';
+  const tokens = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean);
+
+  if (tokens.length === 0) return '?';
+  if (tokens.length === 1) return tokens[0].slice(0, 2).toUpperCase();
+  return `${tokens[0][0] || ''}${tokens[1][0] || ''}`.toUpperCase();
+};
+
+const normalizeDateTimeInput = (value?: string | null): string => {
+  const raw = (value || '').trim();
+  if (!raw) return '';
+  if (raw.includes('--')) return '';
+
+  const compact = raw
+    .replace(/[\u200e\u200f]/g, '')
+    .replace(/\s*\/\s*/g, '/')
+    .replace(/\s*:\s*/g, ':')
+    .replace(/\s*,\s*/g, ', ')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(compact)) {
+    return compact;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(compact)) {
+    return `${compact}T09:00`;
+  }
+
+  if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(compact)) {
+    const [month, day, year] = compact.split('/');
+    const mm = month.padStart(2, '0');
+    const dd = day.padStart(2, '0');
+    return `${year}-${mm}-${dd}T09:00`;
+  }
+
+  const patternCandidates = [
+    "MM/dd/yyyy, hh:mm a",
+    "M/d/yyyy, h:mm a",
+    "MM/dd/yyyy, HH:mm",
+    "M/d/yyyy, H:mm",
+  ];
+
+  for (const pattern of patternCandidates) {
+    const dt = parse(compact, pattern, new Date());
+    if (!Number.isNaN(dt.getTime())) {
+      return format(dt, "yyyy-MM-dd'T'HH:mm");
+    }
+  }
+
+  // Fallback parser for locale-rendered variants where browser inserts
+  // separators/spaces differently (observed in Firefox datetime controls).
+  const numericParts = compact.match(/\d+/g);
+  if (numericParts && numericParts.length >= 3) {
+    let year = 0;
+    let month = 0;
+    let day = 0;
+    let hour = numericParts.length >= 4 ? Number(numericParts[3]) : 9;
+    let minute = numericParts.length >= 5 ? Number(numericParts[4]) : 0;
+    const ampm = /\b(pm|am)\b/i.exec(compact)?.[1]?.toLowerCase();
+
+    const first = Number(numericParts[0]);
+    const second = Number(numericParts[1]);
+    const third = Number(numericParts[2]);
+
+    if (String(numericParts[0]).length === 4) {
+      year = first;
+      month = second;
+      day = third;
+    } else if (String(numericParts[2]).length === 4) {
+      month = first;
+      day = second;
+      year = third;
+    }
+
+    if (ampm === 'pm' && hour < 12) hour += 12;
+    if (ampm === 'am' && hour === 12) hour = 0;
+
+    const isDateValid =
+      year >= 1900 &&
+      year <= 3000 &&
+      month >= 1 &&
+      month <= 12 &&
+      day >= 1 &&
+      day <= 31 &&
+      hour >= 0 &&
+      hour <= 23 &&
+      minute >= 0 &&
+      minute <= 59;
+
+    if (isDateValid) {
+      return `${String(year).padStart(4, '0')}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}T${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
+    }
+  }
+
+  const parsed = parseAppDate(compact);
+  if (!parsed) return '';
+  return format(parsed, "yyyy-MM-dd'T'HH:mm");
+};
+
+const splitDateTimeValue = (value?: string | null): { date: string; time: string } => {
+  const normalized = normalizeDateTimeInput(value);
+  if (!normalized) {
+    return { date: '', time: '09:00' };
+  }
+  const [date, time] = normalized.split('T');
+  return {
+    date: date || '',
+    time: time || '09:00',
+  };
+};
+
+const combineDateTimeParts = (datePart?: string | null, timePart?: string | null): string => {
+  const date = (datePart || '').trim();
+  if (!date) return '';
+  const time = (timePart || '09:00').trim() || '09:00';
+  return `${date}T${time}`;
 };
 
 const useDebouncedValue = <T,>(value: T, delayMs = 300): T => {
@@ -2315,49 +2439,60 @@ function TasksView({ user }: { user: User, key?: string }) {
 
       <div className="grid grid-cols-1 gap-6">
         {visibleTasks.map(task => {
-          const progress = task.subtasks.length > 0 
-            ? Math.round((task.subtasks.filter(s => s.status === 'completed').length / task.subtasks.length) * 100)
+          const completedSubtasks = task.subtasks.filter(s => s.status === 'completed').length;
+          const progress = task.subtasks.length > 0
+            ? Math.round((completedSubtasks / task.subtasks.length) * 100)
             : (task.status === 'completed' ? 100 : 0);
+          const visualStatus = progress === 100 ? 'completed' : task.status;
+          const deadlineDate = parseAppDate(task.deadline);
+          const canDelete = user.role === 'sysAdmin' || (user.role === 'manager' && task.manager_id === user.id);
+          const assigneesPreview = task.assignments.slice(0, 3);
+          const assigneeOverflow = Math.max(0, task.assignments.length - assigneesPreview.length);
+          const statusLabel = visualStatus.replace(/_/g, ' ');
 
           return (
-            <div 
-              key={task.id} 
+            <div
+              key={task.id}
               className="bg-white rounded-3xl border border-zinc-100 shadow-sm overflow-hidden hover:shadow-md transition-all cursor-pointer"
               onClick={() => openTaskDetails(task)}
             >
-              <div className="p-6">
-                <div className="flex justify-between items-start mb-4">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-2">
-                      <h3 className="text-lg font-bold">{task.title}</h3>
-                      <Badge variant={task.status}>{task.status.replace('_', ' ')}</Badge>
+              <div className="p-6 space-y-5">
+                <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <div className="space-y-2 min-w-0">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <h3 className="text-lg font-bold text-zinc-900">{task.title}</h3>
+                      <Badge variant={visualStatus as any}>{statusLabel}</Badge>
                       <Badge variant={task.priority}>{task.priority}</Badge>
                     </div>
-                    <p className="text-sm text-zinc-500 line-clamp-1">{task.instructions}</p>
+                    <p className="text-sm text-zinc-500 line-clamp-2">{task.instructions || 'No instructions provided'}</p>
                   </div>
-                  <div className="flex items-start gap-4">
-                    <div className="text-right">
+                  <div className="flex items-start gap-2 md:gap-3 shrink-0">
+                    <div className="rounded-2xl border border-zinc-100 bg-zinc-50 px-3 py-2 text-right min-w-[158px]">
                       <p className="text-[10px] text-zinc-400 uppercase tracking-wider font-mono">Deadline</p>
-                      <p className="text-sm font-semibold flex items-center gap-1.5 text-zinc-700">
+                      <p className="text-sm font-semibold flex items-center justify-end gap-1.5 text-zinc-700">
                         <Calendar size={14} />
                         {formatDateTime(task.deadline)}
                       </p>
+                      <p className="text-[10px] text-zinc-400 mt-0.5">
+                        {deadlineDate ? formatDistanceToNow(deadlineDate, { addSuffix: true }) : 'No due date set'}
+                      </p>
                     </div>
-                    {(user.role === 'sysAdmin' || (user.role === 'manager' && task.manager_id === user.id)) && (
-                      <button 
+                    {canDelete && (
+                      <button
                         onClick={(e) => {
                           e.stopPropagation();
                           setTaskToDelete(task);
                         }}
-                        className="p-2 text-zinc-300 hover:text-red-600 transition-colors"
+                        className="p-2.5 rounded-xl border border-zinc-200 bg-white text-zinc-400 hover:text-red-600 hover:border-red-200 hover:bg-red-50 transition-colors"
+                        title="Delete task"
                       >
-                        <Trash2 size={18} />
+                        <Trash2 size={17} />
                       </button>
                     )}
                   </div>
                 </div>
 
-                <div className="mb-4">
+                <div>
                   <div className="flex justify-between items-center mb-1.5">
                     <span className="text-[10px] font-bold text-zinc-400 uppercase tracking-widest">Progress</span>
                     <span className="text-[10px] font-bold text-zinc-900">{progress}%</span>
@@ -2365,34 +2500,44 @@ function TasksView({ user }: { user: User, key?: string }) {
                   <ProgressBar progress={progress} />
                 </div>
 
-                <div className="flex items-center justify-between pt-4 border-t border-zinc-50">
-                <div className="flex -space-x-2">
-                  {task.assignments.map(a => (
-                    <div 
-                      key={a.id} 
-                      title={a.full_name}
-                      className="w-8 h-8 rounded-full bg-zinc-100 border-2 border-white flex items-center justify-center text-[10px] font-bold text-zinc-500"
-                    >
-                      {a?.full_name?.charAt(0) || '?'}
-                    </div>
-                  ))}
-                  {task.assignments.length === 0 && <span className="text-xs text-zinc-300 italic">Unassigned</span>}
-                </div>
-                
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center gap-1.5 text-zinc-400">
-                    <CheckCircle2 size={14} />
-                    <span className="text-xs font-medium">
-                      {task.subtasks.filter(s => s.status === 'completed').length}/{task.subtasks.length} Subtasks
-                    </span>
+                <div className="flex flex-wrap items-center justify-between gap-3 pt-4 border-t border-zinc-50">
+                  <div className="flex items-center gap-2">
+                    {assigneesPreview.map(a => (
+                      <div
+                        key={a.id}
+                        title={a.full_name}
+                        className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-600"
+                      >
+                        {getUserInitials(a?.full_name)}
+                      </div>
+                    ))}
+                    {assigneeOverflow > 0 && (
+                      <div className="w-8 h-8 rounded-full bg-zinc-100 border border-zinc-200 flex items-center justify-center text-[10px] font-bold text-zinc-500">
+                        +{assigneeOverflow}
+                      </div>
+                    )}
+                    {task.assignments.length === 0 && <span className="text-xs text-zinc-400 italic">Unassigned</span>}
+                    {task.assignments.length > 0 && (
+                      <span className="text-xs font-medium text-zinc-500">
+                        {task.assignments.length} assignee{task.assignments.length > 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
-                  <ChevronRight size={18} className="text-zinc-300" />
+
+                  <div className="flex items-center gap-3 ml-auto">
+                    <div className="inline-flex items-center gap-1.5 rounded-full bg-zinc-100 px-3 py-1.5 text-zinc-700">
+                      <CheckCircle2 size={14} />
+                      <span className="text-xs font-semibold">
+                        {completedSubtasks}/{task.subtasks.length} subtasks
+                      </span>
+                    </div>
+                    <ChevronRight size={18} className="text-zinc-300" />
+                  </div>
                 </div>
               </div>
             </div>
-          </div>
-        );
-      })}
+          );
+        })}
         {visibleTasks.length === 0 && (
           <div className="bg-white rounded-3xl border border-zinc-100 p-10 text-center shadow-sm">
             <div className="w-14 h-14 rounded-2xl bg-zinc-100 border border-zinc-200 flex items-center justify-center mx-auto mb-4">
@@ -2486,10 +2631,14 @@ function TasksView({ user }: { user: User, key?: string }) {
 }
 
 function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees: User[], onClose: () => void, onSaved: () => void, task?: Task | null }) {
+  const initialDeadlineParts = splitDateTimeValue(task?.deadline);
+  const initialReminderParts = splitDateTimeValue(task?.reminder_at);
+  const hasInitialReminder = Boolean(task?.reminder_at);
   const [formData, setFormData] = useState({
     title: task?.title || '',
     instructions: task?.instructions || '',
-    deadline: toDateTimeLocalValue(task?.deadline),
+    deadline_date: initialDeadlineParts.date,
+    deadline_time: initialDeadlineParts.time,
     priority: task?.priority || 'normal',
     assigned_to: task?.assignments.map(a => a.id) || [] as number[],
     subtasks: task?.subtasks.map(st => ({ 
@@ -2497,11 +2646,17 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
       title: st.title, 
       deadline: toDateTimeLocalValue(st.deadline),
     })) || [] as { id?: number, title: string, deadline: string }[],
-    reminder_at: toDateTimeLocalValue(task?.reminder_at),
+    reminder_date: initialReminderParts.date,
+    reminder_time: initialReminderParts.time,
   });
+  const [enableReminder, setEnableReminder] = useState(hasInitialReminder);
   const [error, setError] = useState('');
   const [assignmentSearch, setAssignmentSearch] = useState('');
-  const [subtaskDraft, setSubtaskDraft] = useState({ title: '', deadline: toDateTimeLocalValue(task?.deadline) });
+  const [subtaskDraft, setSubtaskDraft] = useState({
+    title: '',
+    deadline_date: initialDeadlineParts.date,
+    deadline_time: initialDeadlineParts.time,
+  });
 
   const filteredEmployees = employees.filter(emp =>
     emp.full_name.toLowerCase().includes(assignmentSearch.toLowerCase()) ||
@@ -2519,23 +2674,55 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
 
   const addSubtaskDraft = () => {
     if (!subtaskDraft.title.trim()) return;
+    const fallbackDeadline = combineDateTimeParts(formData.deadline_date, formData.deadline_time);
+    const subtaskDeadline = normalizeDateTimeInput(
+      combineDateTimeParts(subtaskDraft.deadline_date, subtaskDraft.deadline_time),
+    ) || fallbackDeadline;
     setFormData(prev => ({
       ...prev,
-      subtasks: [...prev.subtasks, { title: subtaskDraft.title.trim(), deadline: subtaskDraft.deadline || prev.deadline }],
+      subtasks: [...prev.subtasks, { title: subtaskDraft.title.trim(), deadline: subtaskDeadline }],
     }));
     setSubtaskDraft(prev => ({ ...prev, title: '' }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     setError('');
     const url = task ? `/api/tasks/${task.id}` : '/api/tasks';
     const method = task ? 'PUT' : 'POST';
+    const normalizedTitle = formData.title.trim();
+    if (!normalizedTitle) {
+      setError('Please provide a task title.');
+      return;
+    }
+    const rawReminderAt = enableReminder && formData.reminder_date
+      ? combineDateTimeParts(formData.reminder_date, formData.reminder_time)
+      : '';
+    const combinedDeadline = combineDateTimeParts(formData.deadline_date, formData.deadline_time);
+    const normalizedDeadline = normalizeDateTimeInput(combinedDeadline);
+
+    if (!normalizedDeadline) {
+      setError('Please provide a valid deadline date/time.');
+      return;
+    }
+
+    const payload = {
+      title: normalizedTitle,
+      instructions: formData.instructions,
+      deadline: normalizedDeadline,
+      priority: formData.priority,
+      assigned_to: formData.assigned_to,
+      reminder_at: normalizeDateTimeInput(rawReminderAt) || null,
+      subtasks: formData.subtasks.map((st) => ({
+        ...st,
+        deadline: normalizeDateTimeInput(st.deadline) || normalizedDeadline,
+      })),
+    };
 
     try {
       await apiRequest(url, {
         method,
-        body: formData,
+        body: payload,
       });
       onSaved();
       onClose();
@@ -2550,11 +2737,11 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, y: 20 }}
-        className="bg-white w-full max-w-2xl rounded-3xl shadow-2xl border border-zinc-100 p-8 max-h-[90vh] overflow-y-auto"
+        className="bg-white w-full max-w-4xl rounded-3xl shadow-2xl border border-zinc-100 p-8 max-h-[90vh] overflow-y-auto"
       >
         <h3 className="text-2xl font-bold mb-6">{task ? 'Edit Task' : 'Create New Task'}</h3>
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <form onSubmit={handleSubmit} noValidate className="space-y-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-7">
             <div className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1.5">Task Title</label>
@@ -2573,39 +2760,41 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                   onChange={e => setFormData({ ...formData, instructions: e.target.value })}
                 />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1.5">Deadline</label>
-                  <input 
-                    required
-                    type="datetime-local"
-                    className="w-full px-4 py-2 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:border-zinc-900"
-                    value={formData.deadline}
-                    onChange={e => setFormData({ ...formData, deadline: e.target.value })}
-                  />
+              <div className="space-y-2.5">
+                <label className="block text-xs font-semibold text-zinc-400 uppercase">Deadline</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
+                  <div>
+                    <p className="text-[10px] font-semibold text-zinc-400 uppercase mb-1">Date</p>
+                    <input
+                      type="date"
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:border-zinc-900"
+                      value={formData.deadline_date}
+                      onChange={e => setFormData((prev) => ({ ...prev, deadline_date: e.target.value }))}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-zinc-400 uppercase mb-1">Time</p>
+                    <input
+                      type="time"
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:border-zinc-900"
+                      value={formData.deadline_time}
+                      onChange={e => setFormData((prev) => ({ ...prev, deadline_time: e.target.value || '09:00' }))}
+                    />
+                  </div>
+                  <div>
+                    <p className="text-[10px] font-semibold text-zinc-400 uppercase mb-1">Priority</p>
+                    <select
+                      className="w-full px-3 py-2.5 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:border-zinc-900"
+                      value={formData.priority}
+                      onChange={e => setFormData((prev) => ({ ...prev, priority: e.target.value }))}
+                    >
+                      <option value="low">Low</option>
+                      <option value="normal">Normal</option>
+                      <option value="high">High</option>
+                      <option value="urgent">Urgent</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1.5">Priority</label>
-                  <select 
-                    className="w-full px-4 py-2 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:border-zinc-900"
-                    value={formData.priority}
-                    onChange={e => setFormData({ ...formData, priority: e.target.value })}
-                  >
-                    <option value="low">Low</option>
-                    <option value="normal">Normal</option>
-                    <option value="high">High</option>
-                    <option value="urgent">Urgent</option>
-                  </select>
-                </div>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-zinc-400 uppercase mb-1.5">Set Reminder (Optional)</label>
-                <input 
-                  type="datetime-local"
-                  className="w-full px-4 py-2 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:border-zinc-900"
-                  value={formData.reminder_at}
-                  onChange={e => setFormData({ ...formData, reminder_at: e.target.value })}
-                />
               </div>
             </div>
 
@@ -2654,7 +2843,7 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                       >
                         <p className="font-semibold">{emp.full_name}</p>
                         <p className={cn("text-[10px] uppercase tracking-wider", formData.assigned_to.includes(emp.id) ? "text-zinc-300" : "text-zinc-400")}>
-                          @{emp.username} · {emp.role}
+                          @{emp.username} - {emp.role}
                         </p>
                       </button>
                     ))}
@@ -2677,12 +2866,18 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                       value={subtaskDraft.title}
                       onChange={e => setSubtaskDraft(prev => ({ ...prev, title: e.target.value }))}
                     />
-                    <div className="flex gap-2">
+                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2">
                       <input
-                        type="datetime-local"
-                        className="flex-1 px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
-                        value={subtaskDraft.deadline}
-                        onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline: e.target.value }))}
+                        type="date"
+                        className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                        value={subtaskDraft.deadline_date}
+                        onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline_date: e.target.value }))}
+                      />
+                      <input
+                        type="time"
+                        className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                        value={subtaskDraft.deadline_time}
+                        onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline_time: e.target.value || '09:00' }))}
                       />
                       <button
                         type="button"
@@ -2693,7 +2888,9 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                       </button>
                     </div>
                   </div>
-                  {formData.subtasks.map((st, idx) => (
+                  {formData.subtasks.map((st, idx) => {
+                    const stParts = splitDateTimeValue(st.deadline);
+                    return (
                     <div key={idx} className="space-y-2 p-3 bg-white rounded-xl border border-zinc-100 shadow-sm">
                       <div className="flex gap-2">
                         <input 
@@ -2714,25 +2911,73 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                           <Trash2 size={16} />
                         </button>
                       </div>
-                      <div className="flex items-center gap-2">
-                        <label className="text-[10px] font-bold text-zinc-400 uppercase">Deadline:</label>
-                        <input 
-                          type="datetime-local"
-                          className="flex-1 px-3 py-1 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
-                          value={st.deadline}
+                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-2">
+                        <input
+                          type="date"
+                          className="w-full px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                          value={stParts.date}
                           onChange={e => {
                             const newSubtasks = [...formData.subtasks];
-                            newSubtasks[idx].deadline = e.target.value;
+                            newSubtasks[idx].deadline = combineDateTimeParts(e.target.value, stParts.time);
+                            setFormData({ ...formData, subtasks: newSubtasks });
+                          }}
+                        />
+                        <input
+                          type="time"
+                          className="w-full px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                          value={stParts.time}
+                          onChange={e => {
+                            const newSubtasks = [...formData.subtasks];
+                            newSubtasks[idx].deadline = combineDateTimeParts(stParts.date, e.target.value || '09:00');
                             setFormData({ ...formData, subtasks: newSubtasks });
                           }}
                         />
                       </div>
                     </div>
-                  ))}
+                  )})}
                   {formData.subtasks.length === 0 && <p className="text-[10px] text-zinc-300 italic text-center py-4">No new subtasks added</p>}
                 </div>
               </div>
             </div>
+          </div>
+
+          <div className="space-y-3 rounded-2xl border border-zinc-100 bg-zinc-50 p-4">
+            <div className="flex items-center justify-between">
+              <label className="inline-flex items-center gap-2 text-xs font-semibold text-zinc-600 uppercase tracking-wide cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={enableReminder}
+                  onChange={(e) => setEnableReminder(e.target.checked)}
+                  className="h-4 w-4 rounded border-zinc-300 text-zinc-900 focus:ring-zinc-900"
+                />
+                Set Reminder
+              </label>
+              {enableReminder && (formData.reminder_date || formData.reminder_time !== '09:00') && (
+                <button
+                  type="button"
+                  onClick={() => setFormData((prev) => ({ ...prev, reminder_date: '', reminder_time: '09:00' }))}
+                  className="text-[10px] font-semibold uppercase text-zinc-500 hover:text-zinc-900"
+                >
+                  Clear
+                </button>
+              )}
+            </div>
+            {enableReminder && (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                <input
+                  type="date"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-zinc-200 focus:outline-none focus:border-zinc-900"
+                  value={formData.reminder_date}
+                  onChange={e => setFormData((prev) => ({ ...prev, reminder_date: e.target.value }))}
+                />
+                <input
+                  type="time"
+                  className="w-full px-3 py-2.5 rounded-xl bg-white border border-zinc-200 focus:outline-none focus:border-zinc-900"
+                  value={formData.reminder_time}
+                  onChange={e => setFormData((prev) => ({ ...prev, reminder_time: e.target.value || '09:00' }))}
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex gap-3 pt-6 border-t border-zinc-50">
