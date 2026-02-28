@@ -66,11 +66,12 @@ export const parsePositiveIntParam = (value: string, name: string): number => {
   return parsed;
 };
 
-export const validateLoginInput = (body: unknown): { username: string; password: string } => {
+export const validateLoginInput = (body: unknown): { username: string; password: string; captchaAnswer: string } => {
   const parsed = ensureObject(body, "Invalid login payload");
   const username = ensureString(parsed.username, "username", 3, 64);
   const password = ensureString(parsed.password, "password", 6, 128);
-  return { username, password };
+  const captchaAnswer = ensureString(parsed.captchaAnswer, "captchaAnswer", 1, 16);
+  return { username, password, captchaAnswer };
 };
 
 export const validateTaskInput = (body: unknown): {

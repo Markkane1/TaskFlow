@@ -766,7 +766,28 @@ function NavItem({ active, onClick, icon, label }: { active: boolean, onClick: (
 function Login({ onLogin }: { onLogin: (u: User) => void }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [captchaChallenge, setCaptchaChallenge] = useState('');
+  const [captchaLoading, setCaptchaLoading] = useState(false);
   const [error, setError] = useState('');
+
+  const loadCaptcha = async () => {
+    setCaptchaLoading(true);
+    try {
+      const data = await apiRequest<{ challenge?: string }>('/api/auth/captcha');
+      setCaptchaChallenge(typeof data?.challenge === 'string' ? data.challenge : '');
+      setCaptchaAnswer('');
+    } catch {
+      setCaptchaChallenge('');
+      setError('Failed to load CAPTCHA. Please refresh and try again.');
+    } finally {
+      setCaptchaLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadCaptcha();
+  }, []);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -775,11 +796,12 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
     try {
       const loggedInUser = await apiRequest<User>('/api/auth/login', {
         method: 'POST',
-        body: { username, password },
+        body: { username, password, captchaAnswer },
       });
       onLogin(loggedInUser);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid credentials');
+      loadCaptcha();
     }
   };
 
@@ -821,9 +843,33 @@ function Login({ onLogin }: { onLogin: (u: User) => void }) {
               required
             />
           </div>
+          <div>
+            <div className="flex items-center justify-between mb-1.5 ml-1">
+              <label className="block text-xs font-semibold uppercase tracking-wider text-zinc-400">CAPTCHA</label>
+              <button
+                type="button"
+                onClick={loadCaptcha}
+                className="text-[10px] font-semibold uppercase tracking-wider text-zinc-500 hover:text-zinc-900"
+              >
+                Refresh
+              </button>
+            </div>
+            <div className="w-full px-4 py-3 rounded-xl bg-zinc-50 border border-zinc-100 text-sm font-semibold text-zinc-700 mb-2">
+              {captchaLoading ? 'Loading challenge...' : (captchaChallenge || 'Challenge unavailable')}
+            </div>
+            <input
+              type="text"
+              value={captchaAnswer}
+              onChange={e => setCaptchaAnswer(e.target.value)}
+              className="w-full px-4 py-3 rounded-xl bg-zinc-50 border border-zinc-100 focus:outline-none focus:ring-2 focus:ring-zinc-900/5 focus:border-zinc-900 transition-all"
+              placeholder="Type answer"
+              required
+            />
+          </div>
           {error && <p className="text-red-500 text-xs font-medium">{error}</p>}
           <button 
             type="submit"
+            disabled={captchaLoading || !captchaChallenge}
             className="w-full py-3 bg-zinc-900 text-white rounded-xl font-semibold hover:bg-zinc-800 transition-all shadow-lg shadow-zinc-200"
           >
             Sign In

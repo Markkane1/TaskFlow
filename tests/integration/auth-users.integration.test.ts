@@ -28,6 +28,16 @@ test("GET /api/auth/me requires authentication", async () => {
   assert.equal(response.body.error, "Unauthorized");
 });
 
+test("login requires CAPTCHA answer", async () => {
+  await request(context.app)
+    .post("/api/auth/login")
+    .send({
+      username: "admin",
+      password: "Admin_Strong_Password_123",
+    })
+    .expect(400);
+});
+
 test("sysAdmin can create users; manager is forbidden", async () => {
   const adminAgent = createAgent(context.app);
   await loginAs(adminAgent, "admin", "Admin_Strong_Password_123");
