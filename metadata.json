@@ -1,0 +1,5 @@
+{
+  "name": "TaskFlow Pro",
+  "description": "A comprehensive hierarchical task management system with role-based access control for admins, managers, and employees.",
+  "requestFramePermissions": []
+}
