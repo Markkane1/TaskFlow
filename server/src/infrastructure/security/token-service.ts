@@ -5,7 +5,14 @@ export class TokenService {
   constructor(private readonly jwtSecret: string) {}
 
   sign(payload: AuthPayload): string {
-    return jwt.sign(payload, this.jwtSecret, {
+    const sessionPayload: Pick<AuthPayload, "id" | "username" | "role" | "full_name"> = {
+      id: payload.id,
+      username: payload.username,
+      role: payload.role,
+      full_name: payload.full_name,
+    };
+
+    return jwt.sign(sessionPayload, this.jwtSecret, {
       expiresIn: "12h",
       issuer: "taskflow",
       audience: "taskflow-web",

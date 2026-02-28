@@ -28,8 +28,6 @@ export class AuthService {
       username: user.username,
       role: user.role,
       full_name: user.full_name,
-      email: user.email || null,
-      avatar_url: user.avatar_url || null,
     });
 
     return {

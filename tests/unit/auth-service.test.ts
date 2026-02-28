@@ -24,7 +24,7 @@ class FakePasswordHasher {
   }
 }
 
-const makeUser = (): UserRecord => ({
+const makeUser = (overrides: Partial<UserRecord> = {}): UserRecord => ({
   id: 1,
   username: "sysadmin",
   password: "hashed_placeholder",
@@ -34,6 +34,7 @@ const makeUser = (): UserRecord => ({
   avatar_url: null,
   daily_task_cap: 5,
   created_at: new Date().toISOString(),
+  ...overrides,
 });
 
 test("AuthService.login throws 401 when user does not exist", async () => {
@@ -64,4 +65,21 @@ test("AuthService.login returns signed token and public user payload", async () 
   assert.equal(result.user.role, "sysAdmin");
   assert.equal(typeof result.token, "string");
   assert.ok(result.token.length > 20);
+});
+
+test("AuthService.login keeps JWT compact even with very large avatar_url in DB", async () => {
+  const hugeAvatar = `data:image/png;base64,${"a".repeat(50_000)}`;
+  const tokenService = new TokenService("test_jwt_secret_for_ci_and_local_runs_32_chars_min");
+  const service = new AuthService(
+    new FakeUserRepository(makeUser({ avatar_url: hugeAvatar })) as unknown as UserRepository,
+    new FakePasswordHasher("CorrectHorseBatteryStaple") as unknown as PasswordHasher,
+    tokenService,
+  );
+
+  const result = await service.login("sysadmin", "CorrectHorseBatteryStaple");
+  const decoded = tokenService.verify(result.token);
+
+  assert.ok(result.token.length < 1000, "JWT unexpectedly large");
+  assert.equal(decoded.id, 1);
+  assert.equal(decoded.avatar_url, undefined);
 });
