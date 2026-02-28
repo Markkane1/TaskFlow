@@ -2796,6 +2796,7 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                   </div>
                 </div>
               </div>
+
             </div>
 
             <div className="space-y-4">
@@ -2853,91 +2854,91 @@ function TaskFormModal({ employees, onClose, onSaved, task = null }: { employees
                   </div>
                 </div>
               </div>
+            </div>
+          </div>
 
-              <div>
-                <div className="flex justify-between items-center mb-1.5">
-                  <label className="block text-xs font-semibold text-zinc-400 uppercase">Add Subtasks</label>
-                </div>
-                <div className="space-y-3 max-h-60 overflow-y-auto p-2 bg-zinc-50 rounded-xl border border-zinc-100">
-                  <div className="space-y-2 p-3 bg-white rounded-xl border border-zinc-100">
-                    <input
-                      placeholder="Subtask title"
-                      className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-sm focus:outline-none focus:border-zinc-900"
-                      value={subtaskDraft.title}
-                      onChange={e => setSubtaskDraft(prev => ({ ...prev, title: e.target.value }))}
-                    />
-                    <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2">
-                      <input
-                        type="date"
-                        className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
-                        value={subtaskDraft.deadline_date}
-                        onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline_date: e.target.value }))}
-                      />
-                      <input
-                        type="time"
-                        className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
-                        value={subtaskDraft.deadline_time}
-                        onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline_time: e.target.value || '09:00' }))}
-                      />
-                      <button
-                        type="button"
-                        onClick={addSubtaskDraft}
-                        className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold"
-                      >
-                        Add
-                      </button>
-                    </div>
-                  </div>
-                  {formData.subtasks.map((st, idx) => {
-                    const stParts = splitDateTimeValue(st.deadline);
-                    return (
-                    <div key={idx} className="space-y-2 p-3 bg-white rounded-xl border border-zinc-100 shadow-sm">
-                      <div className="flex gap-2">
-                        <input 
-                          placeholder="Subtask title"
-                          className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-sm focus:outline-none focus:border-zinc-900"
-                          value={st.title}
-                          onChange={e => {
-                            const newSubtasks = [...formData.subtasks];
-                            newSubtasks[idx].title = e.target.value;
-                            setFormData({ ...formData, subtasks: newSubtasks });
-                          }}
-                        />
-                        <button 
-                          type="button"
-                          onClick={() => setFormData({ ...formData, subtasks: formData.subtasks.filter((_, i) => i !== idx) })}
-                          className="text-red-400 hover:text-red-600 p-1"
-                        >
-                          <Trash2 size={16} />
-                        </button>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-2">
-                        <input
-                          type="date"
-                          className="w-full px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
-                          value={stParts.date}
-                          onChange={e => {
-                            const newSubtasks = [...formData.subtasks];
-                            newSubtasks[idx].deadline = combineDateTimeParts(e.target.value, stParts.time);
-                            setFormData({ ...formData, subtasks: newSubtasks });
-                          }}
-                        />
-                        <input
-                          type="time"
-                          className="w-full px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
-                          value={stParts.time}
-                          onChange={e => {
-                            const newSubtasks = [...formData.subtasks];
-                            newSubtasks[idx].deadline = combineDateTimeParts(stParts.date, e.target.value || '09:00');
-                            setFormData({ ...formData, subtasks: newSubtasks });
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )})}
-                  {formData.subtasks.length === 0 && <p className="text-[10px] text-zinc-300 italic text-center py-4">No new subtasks added</p>}
+          <div>
+            <div className="flex justify-between items-center mb-1.5">
+              <label className="block text-xs font-semibold text-zinc-400 uppercase">Add Subtasks</label>
+            </div>
+            <div className="space-y-3 max-h-60 overflow-y-auto p-2 bg-zinc-50 rounded-xl border border-zinc-100">
+              <div className="space-y-2 p-3 bg-white rounded-xl border border-zinc-100">
+                <input
+                  placeholder="Subtask title"
+                  className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-sm focus:outline-none focus:border-zinc-900"
+                  value={subtaskDraft.title}
+                  onChange={e => setSubtaskDraft(prev => ({ ...prev, title: e.target.value }))}
+                />
+                <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px_auto] gap-2">
+                  <input
+                    type="date"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                    value={subtaskDraft.deadline_date}
+                    onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline_date: e.target.value }))}
+                  />
+                  <input
+                    type="time"
+                    className="w-full px-3 py-2 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                    value={subtaskDraft.deadline_time}
+                    onChange={e => setSubtaskDraft(prev => ({ ...prev, deadline_time: e.target.value || '09:00' }))}
+                  />
+                  <button
+                    type="button"
+                    onClick={addSubtaskDraft}
+                    className="px-3 py-2 rounded-lg bg-zinc-900 text-white text-xs font-bold"
+                  >
+                    Add
+                  </button>
                 </div>
               </div>
+              {formData.subtasks.map((st, idx) => {
+                const stParts = splitDateTimeValue(st.deadline);
+                return (
+                <div key={idx} className="space-y-2 p-3 bg-white rounded-xl border border-zinc-100 shadow-sm">
+                  <div className="flex gap-2">
+                    <input 
+                      placeholder="Subtask title"
+                      className="flex-1 px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-sm focus:outline-none focus:border-zinc-900"
+                      value={st.title}
+                      onChange={e => {
+                        const newSubtasks = [...formData.subtasks];
+                        newSubtasks[idx].title = e.target.value;
+                        setFormData({ ...formData, subtasks: newSubtasks });
+                      }}
+                    />
+                    <button 
+                      type="button"
+                      onClick={() => setFormData({ ...formData, subtasks: formData.subtasks.filter((_, i) => i !== idx) })}
+                      className="text-red-400 hover:text-red-600 p-1"
+                    >
+                      <Trash2 size={16} />
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-[1fr_120px] gap-2">
+                    <input
+                      type="date"
+                      className="w-full px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                      value={stParts.date}
+                      onChange={e => {
+                        const newSubtasks = [...formData.subtasks];
+                        newSubtasks[idx].deadline = combineDateTimeParts(e.target.value, stParts.time);
+                        setFormData({ ...formData, subtasks: newSubtasks });
+                      }}
+                    />
+                    <input
+                      type="time"
+                      className="w-full px-3 py-1.5 rounded-lg bg-zinc-50 border border-zinc-100 text-xs focus:outline-none focus:border-zinc-900"
+                      value={stParts.time}
+                      onChange={e => {
+                        const newSubtasks = [...formData.subtasks];
+                        newSubtasks[idx].deadline = combineDateTimeParts(stParts.date, e.target.value || '09:00');
+                        setFormData({ ...formData, subtasks: newSubtasks });
+                      }}
+                    />
+                  </div>
+                </div>
+              )})}
+              {formData.subtasks.length === 0 && <p className="text-[10px] text-zinc-300 italic text-center py-4">No new subtasks added</p>}
             </div>
           </div>
 
