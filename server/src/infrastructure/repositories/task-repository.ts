@@ -191,6 +191,11 @@ export class TaskRepository {
   updateStatus(taskId: number, actorId: number, currentStatus: TaskStatus, input: TaskStatusUpdateInput): void {
     const transaction = db.transaction(() => {
       db.prepare("UPDATE tasks SET status = ?, remarks = ? WHERE id = ?").run(input.status, input.remarks || null, taskId);
+
+      if (input.status === "completed") {
+        db.prepare("UPDATE subtasks SET status = 'completed' WHERE task_id = ? AND status != 'completed'").run(taskId);
+      }
+
       db.prepare("INSERT INTO task_history (task_id, user_id, status_from, status_to, remarks) VALUES (?, ?, ?, ?, ?)").run(
         taskId,
         actorId,
@@ -418,7 +423,7 @@ export class TaskRepository {
         FROM task_history h
         JOIN users u ON h.user_id = u.id
         WHERE h.task_id IN (${placeholders})
-        ORDER BY h.task_id ASC, h.created_at DESC
+        ORDER BY h.task_id ASC, h.created_at ASC, h.id ASC
       `,
           )
           .all(...taskIds) as Array<{ task_id: number }>)

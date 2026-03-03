@@ -3986,6 +3986,21 @@ function CalendarView({ user }: { user: User, key?: string }) {
     setCurrentDate(parsed);
   };
 
+  const getCalendarTaskTone = (task: Task): string => {
+    const deadlineTime = parseAppDate(task.deadline)?.getTime();
+    const isOverdue = task.status !== 'completed' && typeof deadlineTime === 'number' && deadlineTime < Date.now();
+
+    if (task.status === 'completed') {
+      return "bg-emerald-50 text-emerald-700 border-emerald-100";
+    }
+
+    if (isOverdue) {
+      return "bg-red-50 text-red-700 border-red-100";
+    }
+
+    return "bg-amber-50 text-amber-700 border-amber-100";
+  };
+
   const tasksByDay = useMemo(() => {
     const priorityOrder: Record<Task['priority'], number> = { urgent: 4, high: 3, normal: 2, low: 1 };
     const map = new Map<string, Task[]>();
@@ -4046,6 +4061,15 @@ function CalendarView({ user }: { user: User, key?: string }) {
           <div className="mt-2 flex items-center gap-2">
             <span className="inline-flex items-center rounded-full bg-zinc-900 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-white">
               {monthTaskCount} task{monthTaskCount === 1 ? '' : 's'} this month
+            </span>
+            <span className="inline-flex items-center rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+              Completed
+            </span>
+            <span className="inline-flex items-center rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-amber-700">
+              In Progress
+            </span>
+            <span className="inline-flex items-center rounded-full border border-red-200 bg-red-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-red-700">
+              Overdue
             </span>
             {monthTaskCount === 0 && nextUpcomingTask && (
               <button
@@ -4115,9 +4139,7 @@ function CalendarView({ user }: { user: User, key?: string }) {
                           onClick={() => openTaskDetails(task)}
                           className={cn(
                             "w-full text-left p-1.5 rounded-lg text-[10px] font-semibold border transition-all",
-                            task.priority === 'urgent' ? "bg-red-50 text-red-700 border-red-100" :
-                            task.priority === 'high' ? "bg-orange-50 text-orange-700 border-orange-100" :
-                            "bg-zinc-50 text-zinc-700 border-zinc-100"
+                            getCalendarTaskTone(task),
                           )}
                         >
                           <p className="truncate">{task.title}</p>
