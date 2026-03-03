@@ -22,7 +22,7 @@ import { TokenService } from "./infrastructure/security/token-service";
 import { buildApp } from "./presentation/app";
 
 const PORT = Number(process.env.PORT || 3000);
-const CLIENT_URL = process.env.CLIENT_URL || "http://localhost:5173";
+const CLIENT_URL = process.env.CLIENT_URL?.trim() || "";
 const IS_PRODUCTION = process.env.NODE_ENV === "production";
 const EMAIL_NOTIFICATIONS_ENABLED = process.env.EMAIL_NOTIFICATIONS_ENABLED === "true";
 const SEED_DEFAULT_ADMIN = process.env.SEED_DEFAULT_ADMIN === "true";
@@ -42,6 +42,10 @@ const resolveJwtSecret = (): string => {
 };
 
 const JWT_SECRET = resolveJwtSecret();
+
+if (IS_PRODUCTION && !CLIENT_URL) {
+  console.warn("CLIENT_URL is not set. Same-origin requests will still work, but set CLIENT_URL to lock CORS/socket origin.");
+}
 
 const userRepository = new UserRepository();
 const taskRepository = new TaskRepository();
@@ -93,7 +97,7 @@ const bootstrap = async (): Promise<void> => {
   const appServer = http.createServer(app);
   const io = new SocketServer(appServer, {
     cors: {
-      origin: CLIENT_URL,
+      origin: CLIENT_URL || true,
       credentials: true,
     },
   });

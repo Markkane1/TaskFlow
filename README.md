@@ -104,14 +104,29 @@ Apps run on:
 - Client: `http://localhost:5173`
 - Server API: `http://localhost:3000`
 
+Production start (single process, serves built frontend from backend):
+
+```bash
+npm run build
+npm run start
+```
+
 ## Scripts
 
 - `npm run dev`: run client + server concurrently
 - `npm run dev:client`: run only frontend
 - `npm run dev:server`: run only backend
+- `npm run start`: run production server (expects `client/dist` to exist)
 - `npm run build`: build frontend bundle
 - `npm run lint`: type-check client and server
 - `npm run clean`: remove frontend build artifacts
+
+## Oracle Free Tier Deployment
+
+For a one-command VM deploy flow, use:
+
+- [`deploy/oracle-free-tier/README.md`](deploy/oracle-free-tier/README.md)
+- `bash deploy/oracle-free-tier/deploy.sh http://<public-ip>:3000`
 
 ## API Pagination
 
